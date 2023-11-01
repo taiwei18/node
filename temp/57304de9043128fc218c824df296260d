@@ -1,0 +1,184 @@
+const express = require('express');
+const app = express();
+const jwt = require('jsonwebtoken');
+/* 
+nodejieba
+cut:精准模式;
+cutAll:全模式;
+load:加载默认字典;
+extract:关键词提取;
+*/
+const { cut, cutAll, load, extract } = require("nodejieba");
+load();
+
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+});
+
+app.use(express.json());
+
+app.get('/', (req, res) => {
+    res.send('Hello, World!');
+});
+// const users = [
+//     { id: 1, username: 'admin', password: 'admin123', jurisdiction: 'admin' },
+//     { id: 2, username: 'user', password: 'user123', jurisdiction: 'user' }
+// ];
+// //登录
+// app.post('/login', (req, res) => {
+//     const username = req.body.username;
+//     const password = req.body.password;
+//     const user = users.find(user => user.username === username && user.password === password);
+//     if (user) {
+//         const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
+//         res.json({
+//             id: user.id,
+//             username: user.username,
+//             password: user.password,
+//             jurisdiction: user.jurisdiction,
+//             token
+//         })
+//     } else {
+
+//         res.status(401).json({ message: '账号或密码错误' });
+//     }
+// });
+// //查询学生
+// app.get('/student', (req, res) => {
+//     const sql = req.app.locals.request;
+//     sql.query('select * from student', (err, result) => {
+//         if (err) console.log(err);
+//         res.json(result.recordset);
+//     });
+// });
+// //增加学生
+// app.post('/addstudent', (req, res) => {
+//     const sql = req.app.locals.request;
+//     const { id, name, age, gender, grade } = req.body;
+//     sql.query(`insert into student values(${id},'${name}',${age},'${gender}','${grade}')`, (err, result) => {
+//         if (err) res.json(err);
+//         res.json(result);
+//     })
+// });
+// //删除学生
+// app.post('/deletestudent', (req, res) => {
+//     const sql = req.app.locals.request;
+//     const id = req.body.id;
+//     sql.query(`delete from student where id=${id}`, (err, result) => {
+//         if (err) console.log(err);
+//         res.json(result);
+//     })
+// });
+// //改学生信息
+// app.post('/updatestudent', (req, res) => {
+//     const sql = req.app.locals.request;
+//     const { id, name, age, gender, grade } = req.body;
+//     const updateFields = [];
+//     if (name) updateFields.push(`name='${name}'`);
+//     if (age) updateFields.push(`age=${age}`);
+//     if (gender) updateFields.push(`gender='${gender}'`);
+//     if (grade) updateFields.push(`grade='${grade}'`);
+//     const updateStatement = `UPDATE student SET ${updateFields.join(', ')} WHERE id=${id}`;
+//     sql.query(updateStatement, (err, result) => {
+//         if (err) console.log(err);
+//         res.json(result);
+//     })
+// })
+// //访客 存入数据库
+// app.post('/caller', (req, res) => {
+//     const sql = req.app.locals.request;
+//     const { name, phone, time, reason } = req.body;
+//     sql.query(`insert into caller values('${name}','${phone}','${time}','${reason}')`, (err, result) => {
+//         if (err) res.json(err);
+//         res.json(result);
+//     })
+// });
+//客服智能对话
+app.post('/dialogue', async (req, res) => {
+    const sql = req.app.locals.request;
+    const { issue } = req.body;
+    const keywords = cut(issue)
+    sql.query('select * from product', (err, result) => {
+        if (result) {
+            const wordList = result.recordset;
+            let wordCut = []
+            //拿出分好的关键词，包含id，关键词，关联生效敏感词
+            wordList.forEach((item) => {
+                wordCut.push({
+                    id: item.id,
+                    word: cut(item.keywords),
+                    sensitive_words: cut(item.sensitive_words)
+                })
+            })
+            let matchedWords = []
+            const handelMatch = (res) => {
+                for (let index = 0; index < res.length; index++) {
+                    const element = res[index];
+                    for (let index = 0; index < wordCut.length; index++) {
+                        const elementT = wordCut[index];
+                        const isMatch = wordCut.filter(word => elementT.word.includes(element))
+                        const isMatch2 = wordCut.filter(word => elementT.sensitive_words.length > 0 ? elementT.sensitive_words.includes(element) : true)
+                        if (isMatch2.length > 0) {
+                            if (isMatch.length > 0) {
+                                console.log('isMatch', isMatch);
+                                console.log('isMatch2', isMatch2);
+                                elementT.word.forEach(() => {
+                                    matchedWords.push({
+                                        id: elementT.id
+                                    })
+                                })
+                            }
+                        }
+                    }
+                }
+
+
+                // return item.word.filter(word => {
+                //     item.sensitive_words.filter(i => {
+                //         if (!keywords.includes(word)) return
+                //         if (keywords.includes(i)) {
+                //             matchedWords.push({
+                //                 id: item.id,
+                //                 word: word
+                //             })
+                //         }
+                //     })
+                // })
+            }
+            handelMatch(keywords)
+            console.log('matchedWords', matchedWords);
+            //去除matchedWords重复的id
+            matchedWords = Array.from(new Set(matchedWords.map(item => item.id)))
+            //返回的数据
+            var resultData = []
+            matchedWords.map((item2) => {
+                for (let index = 0; index < wordList.length; index++) {
+                    const element = wordList[index];
+                    if (element.id === item2) {
+                        resultData.push({
+                            id: element.id,
+                            word: element.answer
+                        })
+                    }
+                }
+            })
+            console.log('resultData', resultData);
+            if (resultData.length === 0) {
+                return res.json({
+                    type: 0,
+                    word: ['抱歉，没有找到相关问题']
+                });
+            }
+            res.json({
+                type: resultData.length > 1 ? 2 : -1,
+                word: resultData[0]
+            });
+        }
+    })
+
+});
+
+module.exports = app//导出

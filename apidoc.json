@@ -1,0 +1,14 @@
+{
+    "name": "example",
+    "version": "1.0.0",
+    "description": "接口文档描述",
+    "title": "接口文档",
+    "url" : "http://localhost:3000",
+    "header": {
+      "title": "接口通用规则"
+    },
+    "footer": {
+      "title": "API 错误返回值说明"
+    }
+  }
+  
