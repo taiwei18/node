@@ -31,7 +31,7 @@ app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 // 统一返回格式
-const formData = (data = [], code = 200, msg = '成功') => {
+const formData = (data = [], code = 200, msg = '请求成功') => {
     return {
         code: code,
         data: data,
@@ -55,7 +55,6 @@ const formData = (data = [], code = 200, msg = '成功') => {
 app.post("/upload", (req, res) => {
     //利用multiparty中间件获取文件数据
     let uploadDir = './'
-
     let form = new multiparty.Form()
     form.uploadDir = uploadDir
     form.keepExtensions = true; //是否保留后缀
@@ -139,8 +138,6 @@ app.post('/bing', (req, res) => {
         console.error(error);
     });
 })
-
-
 //必应搜索
 function seadBing(query) {
     return new Promise((resolve, reject) => {
@@ -173,8 +170,31 @@ function seadBing(query) {
 }
 //排序算法
 function sortWord(params) {
-
 }
+/**
+ * 获取2个字符串的相似度
+ * @param {string} str1 字符串1
+ * @param {string} str2 字符串2
+ * @returns {number} 相似度 
+ */
+function getSimilarity(str1, str2) {
+    let sameNum = 0
+    //寻找相同字符
+    for (let i = 0; i < str1.length; i++) {
+        for (let j = 0; j < str2.length; j++) {
+            if (str1[i] === str2[j]) {
+                sameNum++
+                break
+            }
+        }
+    }
+    // console.log(str1,str2);
+    // console.log("相似度",(sameNum/str1.length) * 100);
+    //判断2个字符串哪个长度比较长
+    let length = str1.length > str2.length ? str1.length : str2.length
+    return (sameNum / length) * 100 || 0
+}
+
 //客服智能对话
 app.post('/dialogue', async (req, res) => {
     const sql = req.app.locals.request;
@@ -231,41 +251,60 @@ app.post('/dialogue', async (req, res) => {
                     }
                 }
             })
+            console.log(keyword);
             console.log(rankData);
-            //关键词敏感词提取出来权重最高的比对——效果一般，暂时不用
-            for (let index = 0; index < rankData.length; index++) {
-                const element = rankData[index];
-                const isKeywords = keyword.filter(word => element.keywords.includes(word.word))
-                const isSensitive_words = keyword.filter(word => element.sensitive_words?.includes(word.word))
-                if (isSensitive_words.length > 0) {
-                    resultData.push(element)
-                }
-                if (isKeywords.length > 0) {
-                    resultData.push(element)
-                }
+            const extractWord = keyword.map(item => item.word).join(' ');
+            console.log(extractWord);
+            if (rankData.length > 0) {
+                let max = 0;
+                rankData.forEach((item) => {
+                    // 返回相似度最高的数据
+                    const num = getSimilarity(item.keywords, extractWord) + getSimilarity(item.sensitive_words, extractWord);
+                    if (num >= max) {
+                        max = num;
+                        console.log(max);
+                        if (max > 30) {
+                            resultData = [item]; // 更新相似度最高的数据
+                        }
+                    } else {
+                        console.log(max);
+                    }
+                });
+            } else {
+                resultData = rankData;
             }
+            console.log(resultData);
+            //用户消息提取出来权重最高的比对 效果一般,提取关键词不稳定，瞎提取
+            // for (let index = 0; index < rankData.length; index++) {
+            //     const element = rankData[index];
+            //     const isKeywords = keyword.filter(word => element.keywords.includes(word.word))
+            //     const isSensitive_words = keyword.filter(word => element.sensitive_words?.includes(word.word))
+            //     if (isSensitive_words.length > 0) {
+            //         resultData.push(element)
+            //     }
+            //     if (isKeywords.length > 0) {
+            //         resultData.push(element)
+            //     }
+            // }
             if (keywords.length === 0 && result) {
                 return res.send(formData({
                     type: 6,
                     word: result.recordset
                 }));
             }
-            if (rankData.length === 0) {
+            if (resultData.length === 0) {
                 return res.send(formData({
                     type: 0,
                     word: ['抱歉，没有找到相关问题']
                 }));
             }
             return res.send(formData({
-                type: rankData.length > 1 ? 2 : -1,
-                word: rankData
+                type: resultData.length > 1 ? 2 : -1,
+                word: resultData
             }));
         }
     })
-    sql.query('select * from product', (err, result) => {
-
-    })
-
+    sql.query('select * from product', (err, result) => { })
 });
 
 module.exports = app//导出

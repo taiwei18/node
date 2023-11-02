@@ -1,12 +1,11 @@
 const app = require('./router/index')
 const sql = require('mssql');
 
-
-app.listen(3000, () => {
-  console.log('Server is running on port 3000');
+app.listen(process.env.PORT, () => {
+  console.log('Server is running on port 3008');
   console.log(' 🥳');
   console.log(' /|—|');
-  console.log(' / \\');
+  console.log(' / \\ ');
 });
 const config = {
   server: 'localhost',
