@@ -5,12 +5,25 @@ const multer = require("multer");
 const multiparty = require('multiparty');
 const xlsx = require("xlsx");
 const https = require('https');
+const fs = require('fs')
+let welcome = null
+fs.readFile('./welcome.html', 'utf-8', (err, data) => {
+    if (err) {
+        console.error(err);
+        return;
+    }
+    welcome = data;
+    // 在这里处理读取到的 HTML 数据
+    console.log(data);
+})
+
+console.log(welcome);
 /* 
 nodejieba
-cut:精准模式;
-cutAll:全模式;
-load:加载默认字典;
-extract:关键词提取;
+@cut:精准模式;
+@cutAll:全模式;
+@load:加载默认字典;
+@extract:关键词提取;
 */
 const { cut, cutAll, load, extract } = require("nodejieba");
 load();
@@ -28,7 +41,7 @@ app.use(cors({
 const upload = multer({ dest: "temp/" });
 
 app.get('/', (req, res) => {
-    res.send('Hello, World!');
+    res.send(welcome);
 });
 // 统一返回格式
 const formData = (data = [], code = 200, msg = '请求成功') => {
@@ -199,7 +212,8 @@ function getSimilarity(str1, str2) {
 app.post('/dialogue', async (req, res) => {
     const sql = req.app.locals.request;
     const { product, issue } = req.body;
-    const keywords = cut(issue) || []
+    const keywords = cutAll(issue) || []
+    console.log('keywords', keywords);
     const keyword = extract(issue, 4)
     sql.query(`select * from product where product_name='${product}'`, (err, result) => {
         if (result) {
@@ -209,6 +223,7 @@ app.post('/dialogue', async (req, res) => {
                 wordCut.push({
                     id: item.id,
                     product_name: item.product_name,
+                    image: item.image,
                     word: cut(item.keywords),
                     sensitive_words: cut(item.sensitive_words)
                 })
@@ -217,10 +232,12 @@ app.post('/dialogue', async (req, res) => {
             const handelMatch = (res) => {
                 for (let index = 0; index < wordCut.length; index++) {
                     const element = wordCut[index];
+                    // const sensitive = element.sensitive_words.map(item => item).join(' ');
                     const isMatch = res.filter(word => element.word.includes(word))
+                    // console.log(res.includes(sensitive));
                     const isMatch2 = res.filter(word => element.sensitive_words.length > 0 ? element.sensitive_words.includes(word) : true)
-                    if (isMatch2.length > 0) {
-                        if (isMatch.length > 0) {
+                    if (isMatch.length > 0) {
+                        if (isMatch2.length > 0) {
                             element.word.forEach(() => {
                                 matchedWords.push({
                                     id: element.id
@@ -244,6 +261,7 @@ app.post('/dialogue', async (req, res) => {
                         rankData.push({
                             id: element.id,
                             product_name: element.product_name,
+                            image: element.image,
                             keywords: element.keywords,
                             sensitive_words: element.sensitive_words,
                             word: element.answer
@@ -251,9 +269,9 @@ app.post('/dialogue', async (req, res) => {
                     }
                 }
             })
-            console.log(keyword);
+            console.log(matchedWords);
             console.log(rankData);
-            const extractWord = keyword.map(item => item.word).join(' ');
+            const extractWord = keywords.map(item => item).join(' ');
             console.log(extractWord);
             if (rankData.length > 0) {
                 let max = 0;
@@ -262,10 +280,7 @@ app.post('/dialogue', async (req, res) => {
                     const num = getSimilarity(item.keywords, extractWord) + getSimilarity(item.sensitive_words, extractWord);
                     if (num >= max) {
                         max = num;
-                        console.log(max);
-                        if (max > 30) {
-                            resultData = [item]; // 更新相似度最高的数据
-                        }
+                        resultData = [item]; // 更新相似度最高的数据
                     } else {
                         console.log(max);
                     }
